@@ -64,5 +64,8 @@
         "branch-alias": {
             "dev-master": "2.4.x-dev"
         }
+    },
+    "replace": {
+      "gedmo/doctrine-extensions": "^2.3.1"
     }
 }
