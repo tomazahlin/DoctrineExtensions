@@ -1,5 +1,5 @@
 {
-    "name": "tomazahlin/doctrine-extensions",
+    "name": "gedmo/doctrine-extensions",
     "type": "library",
     "description": "Doctrine2 behavioral extensions",
     "keywords": [
@@ -66,6 +66,6 @@
         }
     },
     "replace": {
-      "gedmo/doctrine-extensions": "^2.3.1"
+      "gedmo/doctrine-extensions": "*"
     }
 }
