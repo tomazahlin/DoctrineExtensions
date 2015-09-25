@@ -66,6 +66,6 @@
         }
     },
     "replace": {
-      "gedmo/doctrine-extensions": "2.4.6"
+      "gedmo/doctrine-extensions": "2.4.x-dev"
     }
 }
