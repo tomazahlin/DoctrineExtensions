@@ -2,6 +2,8 @@
 
 namespace Gedmo\SoftDeleteable;
 
+use DateTime;
+use Doctrine\ORM\Mapping\ClassMetadata;
 use Gedmo\Mapping\MappedEventSubscriber;
 use Doctrine\Common\EventArgs;
 use Doctrine\ODM\MongoDB\UnitOfWork as MongoDBUnitOfWork;
@@ -30,6 +32,16 @@ class SoftDeleteableListener extends MappedEventSubscriber
     const POST_SOFT_DELETE = "postSoftDelete";
 
     /**
+     * @var ClassMetadata
+     */
+    private $meta;
+
+    /**
+     * @var array
+     */
+    private $config;
+
+    /**
      * {@inheritdoc}
      */
     public function getSubscribedEvents()
@@ -41,7 +53,7 @@ class SoftDeleteableListener extends MappedEventSubscriber
     }
 
     /**
-     * If it's a SoftDeleteable object, update the "deletedAt" field
+     * If it's a SoftDeleteable object, update the "deleted" field
      * and skip the removal of the object
      *
      * @param EventArgs $args
@@ -57,31 +69,32 @@ class SoftDeleteableListener extends MappedEventSubscriber
 
         //getScheduledDocumentDeletions
         foreach ($ea->getScheduledObjectDeletions($uow) as $object) {
-            $meta = $om->getClassMetadata(get_class($object));
-            $config = $this->getConfiguration($om, $meta->name);
+            $this->meta = $om->getClassMetadata(get_class($object));
+            $this->config = $this->getConfiguration($om, $this->meta->name);
 
-            if (isset($config['softDeleteable']) && $config['softDeleteable']) {
-                $reflProp = $meta->getReflectionProperty($config['fieldName']);
+            if (isset($this->config['softDeleteable']) && $this->config['softDeleteable']) {
+                $reflProp = $this->meta->getReflectionProperty($this->config['fieldName']);
                 $oldValue = $reflProp->getValue($object);
-                if ($oldValue instanceof \Datetime) {
+                if ($this->isSoftDeleted($oldValue)) {
                     continue; // want to hard delete
                 }
 
                 $evm->dispatchEvent(
                     self::PRE_SOFT_DELETE,
                     $ea->createLifecycleEventArgsInstance($object, $om)
-                 );
+                );
 
-                $date = new \DateTime();
-                $reflProp->setValue($object, $date);
+                if ($this->meta->getTypeOfField($this->config['fieldName']))
+                    $newValue = $this->createNewType();
+                $reflProp->setValue($object, $newValue);
 
                 $om->persist($object);
-                $uow->propertyChanged($object, $config['fieldName'], $oldValue, $date);
+                $uow->propertyChanged($object, $this->config['fieldName'], $oldValue, $newValue);
                 if ($uow instanceof MongoDBUnitOfWork && !method_exists($uow, 'scheduleExtraUpdate')) {
-                    $ea->recomputeSingleObjectChangeSet($uow, $meta, $object);
+                    $ea->recomputeSingleObjectChangeSet($uow, $this->meta, $object);
                 } else {
                     $uow->scheduleExtraUpdate($object, array(
-                        $config['fieldName'] => array($oldValue, $date),
+                        $this->config['fieldName'] => array($oldValue, $newValue),
                     ));
                 }
 
@@ -91,6 +104,55 @@ class SoftDeleteableListener extends MappedEventSubscriber
                 );
             }
         }
+    }
+
+    /**
+     * @param $oldValue
+     * @return bool
+     */
+    private function isSoftDeleted($oldValue)
+    {
+        if ($this->isDateTimeType() && $oldValue instanceof Datetime) {
+            return true;
+        }
+
+        if ($this->isBooleanType() && $oldValue === true) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * @return DateTime|bool
+     */
+    private function createNewType()
+    {
+        if ($this->isDateTimeType()) {
+            return new DateTime();
+        }
+
+        if ($this->isBooleanType()) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * @return bool
+     */
+    private function isDateTimeType()
+    {
+        return $this->meta->getTypeOfField($this->config['fieldName']) === 'datetime';
+    }
+
+    /**
+     * @return bool
+     */
+    private function isBooleanType()
+    {
+        return !$this->isDateTimeType();
     }
 
     /**

@@ -25,6 +25,7 @@ class SoftDeleteableFilter extends SQLFilter
     public function addFilterConstraint(ClassMetadata $targetEntity, $targetTableAlias)
     {
         $class = $targetEntity->getName();
+
         if (array_key_exists($class, $this->disabled) && $this->disabled[$class] === true) {
             return '';
         } elseif (array_key_exists($targetEntity->rootEntityName, $this->disabled) && $this->disabled[$targetEntity->rootEntityName] === true) {
@@ -41,13 +42,28 @@ class SoftDeleteableFilter extends SQLFilter
         $platform = $conn->getDatabasePlatform();
         $column = $targetEntity->getQuotedColumnName($config['fieldName'], $platform);
 
-        $addCondSql = $platform->getIsNullExpression($targetTableAlias.'.'.$column);
+        if ($this->isDateTimeType($targetEntity, $config)) {
+            $addCondSql = $platform->getIsNullExpression($targetTableAlias.'.'.$column);
+        } else { // Boolean
+            $addCondSql = $targetTableAlias.'.'.$column.' = 0';
+        }
+
         if (isset($config['timeAware']) && $config['timeAware']) {
             $now = $conn->quote(date('Y-m-d H:i:s')); // should use UTC in database and PHP
             $addCondSql = "({$addCondSql} OR {$targetTableAlias}.{$column} > {$now})";
         }
 
         return $addCondSql;
+    }
+
+    /**
+     * @param ClassMetaData $meta
+     * @param array $config
+     * @return bool
+     */
+    private function isDateTimeType(ClassMetaData $meta, array $config)
+    {
+        return $meta->getTypeOfField($config['fieldName']) === 'datetime';
     }
 
     public function disableForEntity($class)
