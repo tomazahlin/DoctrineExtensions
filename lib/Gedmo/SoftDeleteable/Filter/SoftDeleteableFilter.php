@@ -44,13 +44,15 @@ class SoftDeleteableFilter extends SQLFilter
 
         if ($this->isDateTimeType($targetEntity, $config)) {
             $addCondSql = $platform->getIsNullExpression($targetTableAlias.'.'.$column);
+            if (isset($config['timeAware']) && $config['timeAware']) {
+                $now = $conn->quote(date('Y-m-d H:i:s')); // should use UTC in database and PHP
+                $addCondSql = "({$addCondSql} OR {$targetTableAlias}.{$column} > {$now})";
+            }
         } else { // Boolean
             $addCondSql = $targetTableAlias.'.'.$column.' = 0';
-        }
-
-        if (isset($config['timeAware']) && $config['timeAware']) {
-            $now = $conn->quote(date('Y-m-d H:i:s')); // should use UTC in database and PHP
-            $addCondSql = "({$addCondSql} OR {$targetTableAlias}.{$column} > {$now})";
+            if ($targetEntity->fieldMappings[$column]['nullable']) {
+                $addCondSql = "({$addCondSql} OR {$targetTableAlias}.{$column} IS NULL)";
+            }
         }
 
         return $addCondSql;
